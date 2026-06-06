@@ -140,6 +140,9 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 	}
 
 	usageDto := usage.(*dto.Usage)
+	if err := validateNonEmptyUsage(c, info, usageDto); err != nil {
+		return err
+	}
 	if info.RelayMode == relayconstant.RelayModeResponsesCompact {
 		originModelName := info.OriginModelName
 		originPriceData := info.PriceData

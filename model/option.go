@@ -172,6 +172,7 @@ func InitOptionMap() {
 	common.OptionMap["AutomaticDisableKeywords"] = operation_setting.AutomaticDisableKeywordsToString()
 	common.OptionMap["AutomaticDisableStatusCodes"] = operation_setting.AutomaticDisableStatusCodesToString()
 	common.OptionMap["AutomaticRetryStatusCodes"] = operation_setting.AutomaticRetryStatusCodesToString()
+	common.OptionMap["AutomaticErrorCodeMapping"] = operation_setting.AutomaticErrorCodeMappingToString()
 	common.OptionMap["ExposeRatioEnabled"] = strconv.FormatBool(ratio_setting.IsExposeRatioEnabled())
 
 	// 自动添加所有注册的模型配置
@@ -558,6 +559,8 @@ func updateOptionMap(key string, value string) (err error) {
 		err = operation_setting.AutomaticDisableStatusCodesFromString(value)
 	case "AutomaticRetryStatusCodes":
 		err = operation_setting.AutomaticRetryStatusCodesFromString(value)
+	case "AutomaticErrorCodeMapping":
+		err = operation_setting.AutomaticErrorCodeMappingFromString(value)
 	case "StreamCacheQueueLength":
 		setting.StreamCacheQueueLength, _ = strconv.Atoi(value)
 	case "PayMethods":

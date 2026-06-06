@@ -113,6 +113,21 @@ func (e *NewAPIError) GetErrorCode() ErrorCode {
 	return e.errorCode
 }
 
+func (e *NewAPIError) SetErrorCode(errorCode ErrorCode) {
+	if e == nil {
+		return
+	}
+	e.errorCode = errorCode
+	switch relayError := e.RelayError.(type) {
+	case OpenAIError:
+		relayError.Code = errorCode
+		e.RelayError = relayError
+	case ClaudeError:
+		relayError.Type = string(errorCode)
+		e.RelayError = relayError
+	}
+}
+
 func (e *NewAPIError) GetErrorType() ErrorType {
 	if e == nil {
 		return ""

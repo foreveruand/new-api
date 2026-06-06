@@ -80,6 +80,9 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 		if newApiErr != nil {
 			return newApiErr
 		}
+		if err := validateNonEmptyUsage(c, info, usage); err != nil {
+			return err
+		}
 
 		var containAudioTokens = usage.CompletionTokenDetails.AudioTokens > 0 || usage.PromptTokensDetails.AudioTokens > 0
 		var containsAudioRatios = ratio_setting.ContainsAudioRatio(info.OriginModelName) || ratio_setting.ContainsAudioCompletionRatio(info.OriginModelName)
@@ -211,13 +214,18 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 		return newApiErr
 	}
 
-	var containAudioTokens = usage.(*dto.Usage).CompletionTokenDetails.AudioTokens > 0 || usage.(*dto.Usage).PromptTokensDetails.AudioTokens > 0
+	usageDto := usage.(*dto.Usage)
+	if err := validateNonEmptyUsage(c, info, usageDto); err != nil {
+		return err
+	}
+
+	var containAudioTokens = usageDto.CompletionTokenDetails.AudioTokens > 0 || usageDto.PromptTokensDetails.AudioTokens > 0
 	var containsAudioRatios = ratio_setting.ContainsAudioRatio(info.OriginModelName) || ratio_setting.ContainsAudioCompletionRatio(info.OriginModelName)
 
 	if containAudioTokens && containsAudioRatios {
-		service.PostAudioConsumeQuota(c, info, usage.(*dto.Usage), "")
+		service.PostAudioConsumeQuota(c, info, usageDto, "")
 	} else {
-		service.PostTextConsumeQuota(c, info, usage.(*dto.Usage), nil)
+		service.PostTextConsumeQuota(c, info, usageDto, nil)
 	}
 	return nil
 }

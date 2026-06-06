@@ -145,6 +145,9 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 			return newApiErr
 		}
 
+		if err := validateNonEmptyUsage(c, info, usage); err != nil {
+			return err
+		}
 		service.PostTextConsumeQuota(c, info, usage, nil)
 		return nil
 	}
@@ -218,6 +221,10 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 		return newAPIError
 	}
 
-	service.PostTextConsumeQuota(c, info, usage.(*dto.Usage), nil)
+	usageDto := usage.(*dto.Usage)
+	if err := validateNonEmptyUsage(c, info, usageDto); err != nil {
+		return err
+	}
+	service.PostTextConsumeQuota(c, info, usageDto, nil)
 	return nil
 }

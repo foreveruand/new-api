@@ -14,6 +14,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/types"
 )
 
@@ -153,6 +154,17 @@ func ResetStatusCode(newApiErr *types.NewAPIError, statusCodeMappingStr string) 
 		}
 		newApiErr.StatusCode = intCode
 	}
+}
+
+func ApplyAutomaticErrorCodeMapping(newApiErr *types.NewAPIError) bool {
+	return operation_setting.ApplyErrorCodeMapping(newApiErr)
+}
+
+func EmptyUpstreamResponseError(message string) *types.NewAPIError {
+	if message == "" {
+		message = "empty upstream response"
+	}
+	return types.NewOpenAIError(errors.New(message), types.ErrorCodeEmptyResponse, http.StatusBadGateway)
 }
 
 func parseStatusCodeMappingValue(value any) (int, bool) {
