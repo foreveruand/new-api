@@ -36,3 +36,16 @@ func TestShouldRetryFailureKeywordChannelError(t *testing.T) {
 
 	require.True(t, shouldRetry(c, newAPIError, 1))
 }
+
+func TestShouldRetryRetryKeywordChannelError(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+
+	newAPIError := types.NewOpenAIError(
+		fmt.Errorf("Provider overloaded, try again later"),
+		types.ErrorCodeChannelRetryKeyword,
+		http.StatusBadRequest,
+	)
+
+	require.True(t, shouldRetry(c, newAPIError, 1))
+}

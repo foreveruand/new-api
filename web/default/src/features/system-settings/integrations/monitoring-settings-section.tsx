@@ -52,38 +52,6 @@ const numericString = z.string().refine((value) => {
   return !Number.isNaN(Number(trimmed)) && Number(trimmed) >= 0
 }, 'Enter a non-negative number or leave empty')
 
-function normalizeJsonStringMap(value: string) {
-  const trimmed = value.trim()
-  if (!trimmed) return '{}'
-  const parsed = JSON.parse(trimmed)
-  if (
-    parsed === null ||
-    Array.isArray(parsed) ||
-    typeof parsed !== 'object'
-  ) {
-    throw new Error('Expected a JSON object')
-  }
-  const normalized: Record<string, string> = {}
-  for (const [key, rawValue] of Object.entries(parsed)) {
-    const normalizedKey = key.trim()
-    const normalizedValue =
-      typeof rawValue === 'string' ? rawValue.trim() : ''
-    if (!normalizedKey || !normalizedValue) {
-      throw new Error('Keys and values must be non-empty strings')
-    }
-    normalized[normalizedKey] = normalizedValue
-  }
-  return JSON.stringify(normalized)
-}
-
-function normalizeJsonStringMapOrDefault(value: string) {
-  try {
-    return normalizeJsonStringMap(value)
-  } catch {
-    return '{}'
-  }
-}
-
 const monitoringSchema = z
   .object({
     ChannelDisableThreshold: numericString,
@@ -93,7 +61,7 @@ const monitoringSchema = z
     AutomaticDisableKeywords: z.string(),
     AutomaticDisableStatusCodes: z.string(),
     AutomaticRetryStatusCodes: z.string(),
-    AutomaticErrorCodeMapping: z.string(),
+    AutomaticRetryKeywords: z.string(),
     RetryEmptyResponseEnabled: z.boolean(),
     monitor_setting: z.object({
       auto_test_channel_enabled: z.boolean(),
@@ -129,20 +97,6 @@ const monitoringSchema = z
         )}`,
       })
     }
-
-    try {
-      normalizeJsonStringMap(values.AutomaticErrorCodeMapping)
-    } catch (error) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['AutomaticErrorCodeMapping'],
-        message:
-          error instanceof Error
-            ? error.message
-            : 'Error code mapping must be a JSON object',
-      })
-    }
-
   })
 
 type MonitoringFormValues = z.output<typeof monitoringSchema>
@@ -157,7 +111,7 @@ type MonitoringSettingsSectionProps = {
     AutomaticDisableKeywords: string
     AutomaticDisableStatusCodes: string
     AutomaticRetryStatusCodes: string
-    AutomaticErrorCodeMapping: string
+    AutomaticRetryKeywords: string
     RetryEmptyResponseEnabled: boolean
     'monitor_setting.auto_test_channel_enabled': boolean
     'monitor_setting.auto_test_channel_minutes': number
@@ -176,7 +130,7 @@ type NormalizedMonitoringValues = {
   AutomaticDisableKeywords: string
   AutomaticDisableStatusCodes: string
   AutomaticRetryStatusCodes: string
-  AutomaticErrorCodeMapping: string
+  AutomaticRetryKeywords: string
   RetryEmptyResponseEnabled: boolean
   'monitor_setting.auto_test_channel_enabled': boolean
   'monitor_setting.auto_test_channel_minutes': number
@@ -194,7 +148,9 @@ const buildFormDefaults = (
   ),
   AutomaticDisableStatusCodes: defaults.AutomaticDisableStatusCodes ?? '',
   AutomaticRetryStatusCodes: defaults.AutomaticRetryStatusCodes ?? '',
-  AutomaticErrorCodeMapping: defaults.AutomaticErrorCodeMapping ?? '{}',
+  AutomaticRetryKeywords: normalizeLineEndings(
+    defaults.AutomaticRetryKeywords ?? ''
+  ),
   RetryEmptyResponseEnabled: defaults.RetryEmptyResponseEnabled,
   monitor_setting: {
     auto_test_channel_enabled:
@@ -220,8 +176,8 @@ const normalizeDefaults = (
   AutomaticRetryStatusCodes: parseHttpStatusCodeRules(
     defaults.AutomaticRetryStatusCodes ?? ''
   ).normalized,
-  AutomaticErrorCodeMapping: normalizeJsonStringMapOrDefault(
-    defaults.AutomaticErrorCodeMapping ?? '{}'
+  AutomaticRetryKeywords: normalizeLineEndings(
+    defaults.AutomaticRetryKeywords ?? ''
   ),
   RetryEmptyResponseEnabled: defaults.RetryEmptyResponseEnabled,
   'monitor_setting.auto_test_channel_enabled':
@@ -246,9 +202,7 @@ const normalizeFormValues = (
   AutomaticRetryStatusCodes: parseHttpStatusCodeRules(
     values.AutomaticRetryStatusCodes
   ).normalized,
-  AutomaticErrorCodeMapping: normalizeJsonStringMap(
-    values.AutomaticErrorCodeMapping
-  ),
+  AutomaticRetryKeywords: normalizeLineEndings(values.AutomaticRetryKeywords),
   RetryEmptyResponseEnabled: values.RetryEmptyResponseEnabled,
   'monitor_setting.auto_test_channel_enabled':
     values.monitor_setting.auto_test_channel_enabled,
@@ -569,21 +523,21 @@ export function MonitoringSettingsSection({
 
           <FormField
             control={form.control}
-            name='AutomaticErrorCodeMapping'
+            name='AutomaticRetryKeywords'
             render={({ field }) => (
               <FormItem>
-                <FormLabel>{t('Upstream error code mapping')}</FormLabel>
+                <FormLabel>{t('Error retry keywords')}</FormLabel>
                 <FormControl>
                   <Textarea
                     rows={5}
-                    placeholder='{"empty response":"empty_response"}'
+                    placeholder={t('one keyword per line')}
                     {...field}
                     onChange={(event) => field.onChange(event.target.value)}
                   />
                 </FormControl>
                 <FormDescription>
                   {t(
-                    'Map upstream error message fragments to error codes. Matching is case-insensitive.'
+                    'If an upstream error contains any of these keywords (case insensitive), the request can retry another channel without disabling the current channel.'
                   )}
                 </FormDescription>
                 <FormMessage />

@@ -43,10 +43,13 @@ func EnableChannel(channelId int, usingKey string, channelName string) {
 }
 
 func ShouldDisableChannel(err *types.NewAPIError) bool {
-	if !common.AutomaticDisableChannelEnabled {
+	if err == nil {
 		return false
 	}
-	if err == nil {
+	if err.GetErrorCode() == types.ErrorCodeChannelRetryKeyword {
+		return false
+	}
+	if !common.AutomaticDisableChannelEnabled {
 		return false
 	}
 	if types.IsChannelError(err) {

@@ -173,6 +173,7 @@ func InitOptionMap() {
 	common.OptionMap["AutomaticDisableKeywords"] = operation_setting.AutomaticDisableKeywordsToString()
 	common.OptionMap["AutomaticDisableStatusCodes"] = operation_setting.AutomaticDisableStatusCodesToString()
 	common.OptionMap["AutomaticRetryStatusCodes"] = operation_setting.AutomaticRetryStatusCodesToString()
+	common.OptionMap["AutomaticRetryKeywords"] = operation_setting.AutomaticRetryKeywordsToString()
 	common.OptionMap["AutomaticErrorCodeMapping"] = operation_setting.AutomaticErrorCodeMappingToString()
 	common.OptionMap["ExposeRatioEnabled"] = strconv.FormatBool(ratio_setting.IsExposeRatioEnabled())
 
@@ -205,6 +206,9 @@ func SyncOptions(frequency int) {
 }
 
 func UpdateOption(key string, value string) error {
+	if normalizedValue, ok := normalizeAutomaticRetryKeywordsOption(key, value); ok {
+		value = normalizedValue
+	}
 	// Save to database first
 	option := Option{
 		Key: key,
@@ -216,8 +220,35 @@ func UpdateOption(key string, value string) error {
 	// If save value does not contain primary key, it will execute Create,
 	// otherwise it will execute Update (with all fields).
 	DB.Save(&option)
+	if aliasKey, ok := automaticRetryKeywordsOptionAlias(key); ok {
+		aliasOption := Option{
+			Key: aliasKey,
+		}
+		DB.FirstOrCreate(&aliasOption, Option{Key: aliasKey})
+		aliasOption.Value = value
+		DB.Save(&aliasOption)
+	}
 	// Update OptionMap
 	return updateOptionMap(key, value)
+}
+
+func normalizeAutomaticRetryKeywordsOption(key string, value string) (string, bool) {
+	if key != "AutomaticRetryKeywords" && key != "AutomaticErrorCodeMapping" {
+		return value, false
+	}
+	keywords, _ := operation_setting.ParseRetryKeywords(value)
+	return strings.Join(keywords, "\n"), true
+}
+
+func automaticRetryKeywordsOptionAlias(key string) (string, bool) {
+	switch key {
+	case "AutomaticRetryKeywords":
+		return "AutomaticErrorCodeMapping", true
+	case "AutomaticErrorCodeMapping":
+		return "AutomaticRetryKeywords", true
+	default:
+		return "", false
+	}
 }
 
 // UpdateOptionsBulk persists multiple key/value pairs in a single database
@@ -562,8 +593,18 @@ func updateOptionMap(key string, value string) (err error) {
 		err = operation_setting.AutomaticDisableStatusCodesFromString(value)
 	case "AutomaticRetryStatusCodes":
 		err = operation_setting.AutomaticRetryStatusCodesFromString(value)
+	case "AutomaticRetryKeywords":
+		err = operation_setting.AutomaticRetryKeywordsFromString(value)
+		if err == nil {
+			common.OptionMap["AutomaticRetryKeywords"] = operation_setting.AutomaticRetryKeywordsToString()
+			common.OptionMap["AutomaticErrorCodeMapping"] = operation_setting.AutomaticErrorCodeMappingToString()
+		}
 	case "AutomaticErrorCodeMapping":
 		err = operation_setting.AutomaticErrorCodeMappingFromString(value)
+		if err == nil {
+			common.OptionMap["AutomaticRetryKeywords"] = operation_setting.AutomaticRetryKeywordsToString()
+			common.OptionMap["AutomaticErrorCodeMapping"] = operation_setting.AutomaticErrorCodeMappingToString()
+		}
 	case "StreamCacheQueueLength":
 		setting.StreamCacheQueueLength, _ = strconv.Atoi(value)
 	case "PayMethods":

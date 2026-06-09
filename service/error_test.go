@@ -154,13 +154,16 @@ func TestRelayErrorHandlerKeepsInvalidJSONBodyInDebugLog(t *testing.T) {
 func TestApplyAutomaticErrorCodeMappingUsesDisableKeywordsWhenAutoDisableEnabled(t *testing.T) {
 	oldEnabled := common.AutomaticDisableChannelEnabled
 	oldKeywords := operation_setting.AutomaticDisableKeywords
+	oldRetryKeywords := operation_setting.AutomaticRetryKeywords
 	oldMapping := operation_setting.AutomaticErrorCodeMapping
 	common.AutomaticDisableChannelEnabled = true
 	operation_setting.AutomaticDisableKeywords = []string{"credit balance is too low"}
+	operation_setting.AutomaticRetryKeywords = []string{}
 	operation_setting.AutomaticErrorCodeMapping = map[string]string{}
 	t.Cleanup(func() {
 		common.AutomaticDisableChannelEnabled = oldEnabled
 		operation_setting.AutomaticDisableKeywords = oldKeywords
+		operation_setting.AutomaticRetryKeywords = oldRetryKeywords
 		operation_setting.AutomaticErrorCodeMapping = oldMapping
 	})
 
@@ -170,7 +173,7 @@ func TestApplyAutomaticErrorCodeMappingUsesDisableKeywordsWhenAutoDisableEnabled
 		http.StatusBadRequest,
 	)
 
-	require.True(t, ApplyAutomaticErrorCodeMapping(newAPIError))
+	require.True(t, ApplyAutomaticRetryKeywords(newAPIError))
 	require.Equal(t, types.ErrorCodeChannelFailureKeyword, newAPIError.GetErrorCode())
 	require.True(t, types.IsChannelError(newAPIError))
 }
@@ -178,13 +181,16 @@ func TestApplyAutomaticErrorCodeMappingUsesDisableKeywordsWhenAutoDisableEnabled
 func TestApplyAutomaticErrorCodeMappingDoesNotUseDisableKeywordsWhenAutoDisableDisabled(t *testing.T) {
 	oldEnabled := common.AutomaticDisableChannelEnabled
 	oldKeywords := operation_setting.AutomaticDisableKeywords
+	oldRetryKeywords := operation_setting.AutomaticRetryKeywords
 	oldMapping := operation_setting.AutomaticErrorCodeMapping
 	common.AutomaticDisableChannelEnabled = false
 	operation_setting.AutomaticDisableKeywords = []string{"credit balance is too low"}
+	operation_setting.AutomaticRetryKeywords = []string{}
 	operation_setting.AutomaticErrorCodeMapping = map[string]string{}
 	t.Cleanup(func() {
 		common.AutomaticDisableChannelEnabled = oldEnabled
 		operation_setting.AutomaticDisableKeywords = oldKeywords
+		operation_setting.AutomaticRetryKeywords = oldRetryKeywords
 		operation_setting.AutomaticErrorCodeMapping = oldMapping
 	})
 
@@ -194,8 +200,45 @@ func TestApplyAutomaticErrorCodeMappingDoesNotUseDisableKeywordsWhenAutoDisableD
 		http.StatusBadRequest,
 	)
 
-	require.False(t, ApplyAutomaticErrorCodeMapping(newAPIError))
+	require.False(t, ApplyAutomaticRetryKeywords(newAPIError))
 	require.Equal(t, types.ErrorCodeBadResponseStatusCode, newAPIError.GetErrorCode())
+}
+
+func TestApplyAutomaticRetryKeywordsMarksRetryOnlyChannelError(t *testing.T) {
+	oldRetryKeywords := operation_setting.AutomaticRetryKeywords
+	oldMapping := operation_setting.AutomaticErrorCodeMapping
+	operation_setting.AutomaticRetryKeywords = []string{"provider overloaded"}
+	operation_setting.AutomaticErrorCodeMapping = map[string]string{}
+	t.Cleanup(func() {
+		operation_setting.AutomaticRetryKeywords = oldRetryKeywords
+		operation_setting.AutomaticErrorCodeMapping = oldMapping
+	})
+
+	newAPIError := types.NewOpenAIError(
+		fmt.Errorf("Provider Overloaded, try again later"),
+		types.ErrorCodeBadResponseStatusCode,
+		http.StatusBadRequest,
+	)
+
+	require.True(t, ApplyAutomaticRetryKeywords(newAPIError))
+	require.Equal(t, types.ErrorCodeChannelRetryKeyword, newAPIError.GetErrorCode())
+	require.True(t, types.IsChannelError(newAPIError))
+}
+
+func TestShouldDisableChannelIgnoresRetryKeywordError(t *testing.T) {
+	oldEnabled := common.AutomaticDisableChannelEnabled
+	common.AutomaticDisableChannelEnabled = true
+	t.Cleanup(func() {
+		common.AutomaticDisableChannelEnabled = oldEnabled
+	})
+
+	newAPIError := types.NewOpenAIError(
+		fmt.Errorf("Provider overloaded, try again later"),
+		types.ErrorCodeChannelRetryKeyword,
+		http.StatusBadRequest,
+	)
+
+	require.False(t, ShouldDisableChannel(newAPIError))
 }
 
 func withDebugEnabled(t *testing.T, enabled bool) {

@@ -85,3 +85,26 @@ func TestIsAlwaysSkipRetryStatusCode(t *testing.T) {
 	require.True(t, IsAlwaysSkipRetryStatusCode(524))
 	require.False(t, IsAlwaysSkipRetryStatusCode(500))
 }
+
+func TestParseRetryKeywordsLineSeparated(t *testing.T) {
+	keywords, err := ParseRetryKeywords(" temporary overload \n\nrate limited\n")
+
+	require.NoError(t, err)
+	require.Equal(t, []string{"temporary overload", "rate limited"}, keywords)
+}
+
+func TestParseRetryKeywordsLegacyJSONMappingUsesKeys(t *testing.T) {
+	keywords, err := ParseRetryKeywords(`{"quota exceeded":"insufficient_quota","temporary overload":"server_error"}`)
+
+	require.NoError(t, err)
+	require.Equal(t, []string{"quota exceeded", "temporary overload"}, keywords)
+}
+
+func TestParseErrorCodeMappingCompatibilityUsesRetryKeywordCode(t *testing.T) {
+	mapping, err := ParseErrorCodeMapping(`{"quota exceeded":"insufficient_quota"}`)
+
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{
+		"quota exceeded": "channel:retry_keyword",
+	}, mapping)
+}

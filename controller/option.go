@@ -295,6 +295,15 @@ func UpdateOption(c *gin.Context) {
 			})
 			return
 		}
+	case "AutomaticRetryKeywords":
+		_, err = operation_setting.ParseRetryKeywords(option.Value.(string))
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": err.Error(),
+			})
+			return
+		}
 	case "AutomaticErrorCodeMapping":
 		_, err = operation_setting.ParseErrorCodeMapping(option.Value.(string))
 		if err != nil {

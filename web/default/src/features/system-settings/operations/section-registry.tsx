@@ -55,7 +55,7 @@ const OPERATIONS_SECTIONS = [
           AutomaticDisableKeywords: settings.AutomaticDisableKeywords,
           AutomaticDisableStatusCodes: settings.AutomaticDisableStatusCodes,
           AutomaticRetryStatusCodes: settings.AutomaticRetryStatusCodes,
-          AutomaticErrorCodeMapping: settings.AutomaticErrorCodeMapping,
+          AutomaticRetryKeywords: settings.AutomaticRetryKeywords,
           RetryEmptyResponseEnabled: settings.RetryEmptyResponseEnabled,
           'monitor_setting.auto_test_channel_enabled':
             settings['monitor_setting.auto_test_channel_enabled'],
