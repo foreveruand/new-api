@@ -33,6 +33,9 @@ func OaiResponsesHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 	if oaiError := responsesResponse.GetOpenAIError(); oaiError != nil && oaiError.Type != "" {
 		return nil, types.WithOpenAIError(*oaiError, resp.StatusCode)
 	}
+	if service.ShouldTreatEmptyResponseAsFailure() && !responsesResponse.HasVisibleOutput() {
+		return nil, service.EmptyUpstreamResponseError("empty upstream response from responses api")
+	}
 
 	if responsesResponse.HasImageGenerationCall() {
 		c.Set("image_generation_call", true)
@@ -78,6 +81,19 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 
 	var usage = &dto.Usage{}
 	var responseTextBuilder strings.Builder
+	var hasVisibleOutput bool
+	type pendingResponseEvent struct {
+		raw    string
+		parsed dto.ResponsesStreamResponse
+	}
+	var pendingData []pendingResponseEvent
+
+	flushPendingData := func() {
+		for _, pending := range pendingData {
+			sendResponsesStreamData(c, pending.parsed, pending.raw)
+		}
+		pendingData = nil
+	}
 
 	helper.StreamScannerHandler(c, resp, info, func(data string, sr *helper.StreamResult) {
 
@@ -86,6 +102,17 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 		if err := common.UnmarshalJsonStr(data, &streamResponse); err != nil {
 			logger.LogError(c, "failed to unmarshal stream response: "+err.Error())
 			sr.Error(err)
+			return
+		}
+		if !hasVisibleOutput && responsesStreamEventHasVisibleOutput(streamResponse) {
+			hasVisibleOutput = true
+			flushPendingData()
+		}
+		if service.ShouldTreatEmptyResponseAsFailure() && !hasVisibleOutput {
+			pendingData = append(pendingData, pendingResponseEvent{
+				raw:    data,
+				parsed: streamResponse,
+			})
 			return
 		}
 		sendResponsesStreamData(c, streamResponse, data)
@@ -145,6 +172,9 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 	}
 
 	usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
+	if service.ShouldTreatEmptyResponseAsFailure() && !hasVisibleOutput {
+		return nil, service.EmptyUpstreamResponseError("empty upstream response from responses api")
+	}
 
 	return usage, nil
 }

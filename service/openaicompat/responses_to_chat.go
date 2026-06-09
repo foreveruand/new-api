@@ -4,12 +4,17 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/dto"
 )
 
 func ResponsesResponseToChatCompletionsResponse(resp *dto.OpenAIResponsesResponse, id string) (*dto.OpenAITextResponse, *dto.Usage, error) {
 	if resp == nil {
 		return nil, nil, errors.New("response is nil")
+	}
+
+	if common.RetryEmptyResponseEnabled && !resp.HasVisibleOutput() {
+		return nil, nil, errors.New("empty upstream response from responses api")
 	}
 
 	text := ExtractOutputTextFromResponses(resp)

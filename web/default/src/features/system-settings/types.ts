@@ -282,6 +282,7 @@ export type OperationsSettings = {
   AutomaticDisableStatusCodes: string
   AutomaticRetryStatusCodes: string
   AutomaticErrorCodeMapping: string
+  RetryEmptyResponseEnabled: boolean
   'monitor_setting.auto_test_channel_enabled': boolean
   'monitor_setting.auto_test_channel_minutes': number
   SMTPServer: string

@@ -115,6 +115,53 @@ func processCompletionsStreamResponse(streamResponse dto.CompletionsStreamRespon
 	}
 }
 
+func responsesStreamEventHasVisibleOutput(streamResponse dto.ResponsesStreamResponse) bool {
+	switch streamResponse.Type {
+	case "response.output_text.delta":
+		return streamResponse.Delta != ""
+	case "response.reasoning_summary_text.delta":
+		return streamResponse.Delta != ""
+	case "response.output_item.added", "response.output_item.done":
+		return streamResponse.Item != nil && streamResponse.Item.Type == "function_call"
+	case "response.function_call_arguments.delta":
+		return streamResponse.Delta != ""
+	case "response.completed":
+		return streamResponse.Response != nil && streamResponse.Response.HasVisibleOutput()
+	default:
+		return false
+	}
+}
+
+func streamDataHasOutput(relayMode int, data string) (bool, error) {
+	switch relayMode {
+	case relayconstant.RelayModeChatCompletions:
+		var streamResponse dto.ChatCompletionsStreamResponse
+		if err := common.UnmarshalJsonStr(data, &streamResponse); err != nil {
+			return false, err
+		}
+		for _, choice := range streamResponse.Choices {
+			if choice.Delta.GetContentString() != "" ||
+				choice.Delta.GetReasoningContent() != "" ||
+				len(choice.Delta.ToolCalls) > 0 {
+				return true, nil
+			}
+		}
+	case relayconstant.RelayModeCompletions:
+		var streamResponse dto.CompletionsStreamResponse
+		if err := common.UnmarshalJsonStr(data, &streamResponse); err != nil {
+			return false, err
+		}
+		for _, choice := range streamResponse.Choices {
+			if choice.Text != "" {
+				return true, nil
+			}
+		}
+	default:
+		return true, nil
+	}
+	return false, nil
+}
+
 func handleLastResponse(lastStreamData string, responseId *string, createAt *int64,
 	systemFingerprint *string, model *string, usage **dto.Usage,
 	containStreamUsage *bool, info *relaycommon.RelayInfo,

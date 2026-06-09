@@ -94,6 +94,7 @@ const monitoringSchema = z
     AutomaticDisableStatusCodes: z.string(),
     AutomaticRetryStatusCodes: z.string(),
     AutomaticErrorCodeMapping: z.string(),
+    RetryEmptyResponseEnabled: z.boolean(),
     monitor_setting: z.object({
       auto_test_channel_enabled: z.boolean(),
       auto_test_channel_minutes: z.coerce
@@ -141,6 +142,7 @@ const monitoringSchema = z
             : 'Error code mapping must be a JSON object',
       })
     }
+
   })
 
 type MonitoringFormValues = z.output<typeof monitoringSchema>
@@ -156,6 +158,7 @@ type MonitoringSettingsSectionProps = {
     AutomaticDisableStatusCodes: string
     AutomaticRetryStatusCodes: string
     AutomaticErrorCodeMapping: string
+    RetryEmptyResponseEnabled: boolean
     'monitor_setting.auto_test_channel_enabled': boolean
     'monitor_setting.auto_test_channel_minutes': number
   }
@@ -174,6 +177,7 @@ type NormalizedMonitoringValues = {
   AutomaticDisableStatusCodes: string
   AutomaticRetryStatusCodes: string
   AutomaticErrorCodeMapping: string
+  RetryEmptyResponseEnabled: boolean
   'monitor_setting.auto_test_channel_enabled': boolean
   'monitor_setting.auto_test_channel_minutes': number
 }
@@ -191,6 +195,7 @@ const buildFormDefaults = (
   AutomaticDisableStatusCodes: defaults.AutomaticDisableStatusCodes ?? '',
   AutomaticRetryStatusCodes: defaults.AutomaticRetryStatusCodes ?? '',
   AutomaticErrorCodeMapping: defaults.AutomaticErrorCodeMapping ?? '{}',
+  RetryEmptyResponseEnabled: defaults.RetryEmptyResponseEnabled,
   monitor_setting: {
     auto_test_channel_enabled:
       defaults['monitor_setting.auto_test_channel_enabled'],
@@ -218,6 +223,7 @@ const normalizeDefaults = (
   AutomaticErrorCodeMapping: normalizeJsonStringMapOrDefault(
     defaults.AutomaticErrorCodeMapping ?? '{}'
   ),
+  RetryEmptyResponseEnabled: defaults.RetryEmptyResponseEnabled,
   'monitor_setting.auto_test_channel_enabled':
     defaults['monitor_setting.auto_test_channel_enabled'],
   'monitor_setting.auto_test_channel_minutes':
@@ -243,6 +249,7 @@ const normalizeFormValues = (
   AutomaticErrorCodeMapping: normalizeJsonStringMap(
     values.AutomaticErrorCodeMapping
   ),
+  RetryEmptyResponseEnabled: values.RetryEmptyResponseEnabled,
   'monitor_setting.auto_test_channel_enabled':
     values.monitor_setting.auto_test_channel_enabled,
   'monitor_setting.auto_test_channel_minutes':
@@ -449,6 +456,29 @@ export function MonitoringSettingsSection({
                 </SettingsSwitchItem>
               )}
             />
+
+            <FormField
+              control={form.control}
+              name='RetryEmptyResponseEnabled'
+              render={({ field }) => (
+                <SettingsSwitchItem>
+                  <SettingsSwitchContent>
+                    <FormLabel>{t('Retry empty responses')}</FormLabel>
+                    <FormDescription>
+                      {t(
+                        'Treat empty upstream responses as failures so the request can retry another channel.'
+                      )}
+                    </FormDescription>
+                  </SettingsSwitchContent>
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                </SettingsSwitchItem>
+              )}
+            />
           </div>
 
           <FormField
@@ -467,7 +497,7 @@ export function MonitoringSettingsSection({
                 </FormControl>
                 <FormDescription>
                   {t(
-                    'If an upstream error contains any of these keywords (case insensitive), the channel will be disabled automatically.'
+                    'If an upstream error contains any of these keywords (case insensitive), the channel will be disabled automatically and the request can retry another channel.'
                   )}
                 </FormDescription>
                 <FormMessage />

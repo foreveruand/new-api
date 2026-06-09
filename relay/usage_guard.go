@@ -11,6 +11,9 @@ import (
 )
 
 func validateNonEmptyUsage(c *gin.Context, info *relaycommon.RelayInfo, usage *dto.Usage) *types.NewAPIError {
+	if !service.ShouldTreatEmptyResponseAsFailure() {
+		return nil
+	}
 	if usage != nil {
 		if usage.PromptTokens+usage.CompletionTokens > 0 {
 			return nil

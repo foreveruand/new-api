@@ -121,30 +121,70 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 	var usage = &dto.Usage{}
 	var lastStreamData string
 	var secondLastStreamData string // 存储倒数第二个stream data，用于音频模型
+	strictEmptyResponse := service.ShouldTreatEmptyResponseAsFailure()
+	hasStreamOutput := !strictEmptyResponse
+	var pendingStreamData []string
 
 	// 检查是否为音频模型
 	isAudioModel := strings.Contains(strings.ToLower(model), "audio")
 
-	helper.StreamScannerHandler(c, resp, info, func(data string, sr *helper.StreamResult) {
-		if lastStreamData != "" {
-			if err := HandleStreamFormat(c, info, lastStreamData, info.ChannelSetting.ForceFormat, info.ChannelSetting.ThinkingToContent); err != nil {
-				common.SysLog("error handling stream format: " + err.Error())
-				sr.Error(err)
-			}
+	sendStreamFormat := func(data string, sr *helper.StreamResult) {
+		if err := HandleStreamFormat(c, info, data, info.ChannelSetting.ForceFormat, info.ChannelSetting.ThinkingToContent); err != nil {
+			common.SysLog("error handling stream format: " + err.Error())
+			sr.Error(err)
 		}
-		if len(data) > 0 {
-			// 对音频模型，保存倒数第二个stream data
-			if isAudioModel && lastStreamData != "" {
-				secondLastStreamData = lastStreamData
-			}
+	}
 
-			lastStreamData = data
-			if err := processTokenData(info.RelayMode, data, &responseTextBuilder, &toolCount); err != nil {
-				logger.LogError(c, "error processing stream token data: "+err.Error())
+	flushPendingStreamData := func(sr *helper.StreamResult) {
+		for _, pendingData := range pendingStreamData {
+			sendStreamFormat(pendingData, sr)
+		}
+		pendingStreamData = nil
+	}
+
+	rememberStreamData := func(data string, sr *helper.StreamResult) {
+		// 对音频模型，保存倒数第二个stream data
+		if isAudioModel && lastStreamData != "" {
+			secondLastStreamData = lastStreamData
+		}
+
+		lastStreamData = data
+		if err := processTokenData(info.RelayMode, data, &responseTextBuilder, &toolCount); err != nil {
+			logger.LogError(c, "error processing stream token data: "+err.Error())
+			sr.Error(err)
+		}
+	}
+
+	helper.StreamScannerHandler(c, resp, info, func(data string, sr *helper.StreamResult) {
+		if len(data) == 0 {
+			return
+		}
+
+		if strictEmptyResponse && !hasStreamOutput {
+			hasOutput, err := streamDataHasOutput(info.RelayMode, data)
+			if err != nil {
+				logger.LogError(c, "error checking stream output: "+err.Error())
 				sr.Error(err)
 			}
+			if !hasOutput {
+				pendingStreamData = append(pendingStreamData, data)
+				return
+			}
+			hasStreamOutput = true
+			flushPendingStreamData(sr)
+			lastStreamData = ""
 		}
+
+		if lastStreamData != "" {
+			sendStreamFormat(lastStreamData, sr)
+		}
+		rememberStreamData(data, sr)
 	})
+
+	if strictEmptyResponse && !hasStreamOutput {
+		logger.LogError(c, fmt.Sprintf("empty stream response, lastStreamData: [%s]", lastStreamData))
+		return nil, service.EmptyUpstreamResponseError("empty stream response from upstream")
+	}
 
 	// 对音频模型，从倒数第二个stream data中提取usage信息
 	if isAudioModel && secondLastStreamData != "" {
@@ -253,6 +293,10 @@ func OpenaiHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 	}
 
 	applyUsagePostProcessing(info, &simpleResponse.Usage, responseBody)
+
+	if service.ShouldTreatEmptyResponseAsFailure() && len(simpleResponse.Choices) == 0 {
+		return nil, service.EmptyUpstreamResponseError("empty upstream response from upstream")
+	}
 
 	switch info.RelayFormat {
 	case types.RelayFormatOpenAI:

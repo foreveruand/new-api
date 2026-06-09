@@ -157,7 +157,17 @@ func ResetStatusCode(newApiErr *types.NewAPIError, statusCodeMappingStr string) 
 }
 
 func ApplyAutomaticErrorCodeMapping(newApiErr *types.NewAPIError) bool {
-	return operation_setting.ApplyErrorCodeMapping(newApiErr)
+	if operation_setting.ApplyErrorCodeMapping(newApiErr) {
+		return true
+	}
+	if common.AutomaticDisableChannelEnabled {
+		return operation_setting.ApplyDisableKeywordErrorCode(newApiErr)
+	}
+	return false
+}
+
+func ShouldTreatEmptyResponseAsFailure() bool {
+	return common.RetryEmptyResponseEnabled
 }
 
 func EmptyUpstreamResponseError(message string) *types.NewAPIError {

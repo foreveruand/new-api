@@ -3,6 +3,7 @@ package dto
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/types"
@@ -331,6 +332,38 @@ func (o *OpenAIResponsesResponse) GetSize() string {
 		}
 	}
 	return ""
+}
+
+func (o *OpenAIResponsesResponse) HasVisibleOutput() bool {
+	if o == nil || len(o.Output) == 0 {
+		return false
+	}
+	for _, output := range o.Output {
+		switch output.Type {
+		case "message":
+			for _, c := range output.Content {
+				if c.Type == "output_text" && c.Text != "" {
+					return true
+				}
+				if c.Type == "summary_text" && c.Text != "" {
+					return true
+				}
+			}
+		case "function_call":
+			if strings.TrimSpace(output.Name) != "" || strings.TrimSpace(output.ArgumentsString()) != "" {
+				return true
+			}
+		case ResponsesOutputTypeImageGenerationCall:
+			return true
+		default:
+			for _, c := range output.Content {
+				if c.Text != "" {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 type IncompleteDetails struct {

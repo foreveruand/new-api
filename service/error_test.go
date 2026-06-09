@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/types"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
@@ -148,6 +149,53 @@ func TestRelayErrorHandlerKeepsInvalidJSONBodyInDebugLog(t *testing.T) {
 	require.NotNil(t, newAPIError)
 	require.NotContains(t, logBuffer.String(), "[truncated")
 	require.Contains(t, logBuffer.String(), body)
+}
+
+func TestApplyAutomaticErrorCodeMappingUsesDisableKeywordsWhenAutoDisableEnabled(t *testing.T) {
+	oldEnabled := common.AutomaticDisableChannelEnabled
+	oldKeywords := operation_setting.AutomaticDisableKeywords
+	oldMapping := operation_setting.AutomaticErrorCodeMapping
+	common.AutomaticDisableChannelEnabled = true
+	operation_setting.AutomaticDisableKeywords = []string{"credit balance is too low"}
+	operation_setting.AutomaticErrorCodeMapping = map[string]string{}
+	t.Cleanup(func() {
+		common.AutomaticDisableChannelEnabled = oldEnabled
+		operation_setting.AutomaticDisableKeywords = oldKeywords
+		operation_setting.AutomaticErrorCodeMapping = oldMapping
+	})
+
+	newAPIError := types.NewOpenAIError(
+		fmt.Errorf("Your credit balance is too low"),
+		types.ErrorCodeBadResponseStatusCode,
+		http.StatusBadRequest,
+	)
+
+	require.True(t, ApplyAutomaticErrorCodeMapping(newAPIError))
+	require.Equal(t, types.ErrorCodeChannelFailureKeyword, newAPIError.GetErrorCode())
+	require.True(t, types.IsChannelError(newAPIError))
+}
+
+func TestApplyAutomaticErrorCodeMappingDoesNotUseDisableKeywordsWhenAutoDisableDisabled(t *testing.T) {
+	oldEnabled := common.AutomaticDisableChannelEnabled
+	oldKeywords := operation_setting.AutomaticDisableKeywords
+	oldMapping := operation_setting.AutomaticErrorCodeMapping
+	common.AutomaticDisableChannelEnabled = false
+	operation_setting.AutomaticDisableKeywords = []string{"credit balance is too low"}
+	operation_setting.AutomaticErrorCodeMapping = map[string]string{}
+	t.Cleanup(func() {
+		common.AutomaticDisableChannelEnabled = oldEnabled
+		operation_setting.AutomaticDisableKeywords = oldKeywords
+		operation_setting.AutomaticErrorCodeMapping = oldMapping
+	})
+
+	newAPIError := types.NewOpenAIError(
+		fmt.Errorf("Your credit balance is too low"),
+		types.ErrorCodeBadResponseStatusCode,
+		http.StatusBadRequest,
+	)
+
+	require.False(t, ApplyAutomaticErrorCodeMapping(newAPIError))
+	require.Equal(t, types.ErrorCodeBadResponseStatusCode, newAPIError.GetErrorCode())
 }
 
 func withDebugEnabled(t *testing.T, enabled bool) {

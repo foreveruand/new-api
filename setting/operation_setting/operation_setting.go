@@ -1,6 +1,10 @@
 package operation_setting
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/QuantumNous/new-api/types"
+)
 
 var DemoSiteEnabled = false
 var SelfUseModeEnabled = false
@@ -29,4 +33,26 @@ func AutomaticDisableKeywordsFromString(s string) {
 			AutomaticDisableKeywords = append(AutomaticDisableKeywords, k)
 		}
 	}
+}
+
+func MatchAutomaticDisableKeyword(message string) bool {
+	message = strings.ToLower(strings.TrimSpace(message))
+	if message == "" {
+		return false
+	}
+	for _, keyword := range AutomaticDisableKeywords {
+		keyword = strings.ToLower(strings.TrimSpace(keyword))
+		if keyword != "" && strings.Contains(message, keyword) {
+			return true
+		}
+	}
+	return false
+}
+
+func ApplyDisableKeywordErrorCode(err *types.NewAPIError) bool {
+	if err == nil || !MatchAutomaticDisableKeyword(err.Error()) {
+		return false
+	}
+	err.SetErrorCode(types.ErrorCodeChannelFailureKeyword)
+	return true
 }

@@ -102,13 +102,14 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 	model := info.UpstreamModelName
 
 	var (
-		usage       = &dto.Usage{}
-		outputText  strings.Builder
-		usageText   strings.Builder
-		sentStart   bool
-		sentStop    bool
-		sawToolCall bool
-		streamErr   *types.NewAPIError
+		usage            = &dto.Usage{}
+		outputText       strings.Builder
+		usageText        strings.Builder
+		sentStart        bool
+		sentStop         bool
+		sawToolCall      bool
+		hasVisibleOutput bool
+		streamErr        *types.NewAPIError
 	)
 
 	toolCallIndexByID := make(map[string]int)
@@ -329,6 +330,9 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 		//case "response.reasoning_text.done":
 
 		case "response.reasoning_summary_text.delta":
+			if streamResp.Delta != "" {
+				hasVisibleOutput = true
+			}
 			if !sendReasoningSummaryDelta(streamResp.Delta) {
 				sr.Stop(streamErr)
 				return
@@ -358,12 +362,12 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 		//	}
 
 		case "response.output_text.delta":
-			if !sendStartIfNeeded() {
-				sr.Stop(streamErr)
-				return
-			}
-
 			if streamResp.Delta != "" {
+				hasVisibleOutput = true
+				if !sendStartIfNeeded() {
+					sr.Stop(streamErr)
+					return
+				}
 				outputText.WriteString(streamResp.Delta)
 				usageText.WriteString(streamResp.Delta)
 				delta := streamResp.Delta
@@ -394,6 +398,7 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 			if streamResp.Item.Type != "function_call" {
 				break
 			}
+			hasVisibleOutput = true
 
 			itemID := strings.TrimSpace(streamResp.Item.ID)
 			callID := strings.TrimSpace(streamResp.Item.CallId)
@@ -434,6 +439,9 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 			if callID == "" {
 				break
 			}
+			if streamResp.Delta != "" {
+				hasVisibleOutput = true
+			}
 			toolCallArgsByID[callID] += streamResp.Delta
 			if !sendToolCallDelta(callID, "", streamResp.Delta) {
 				sr.Stop(streamErr)
@@ -473,8 +481,16 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 						usage.CompletionTokenDetails.ReasoningTokens = streamResp.Response.Usage.CompletionTokenDetails.ReasoningTokens
 					}
 				}
+				if streamResp.Response.HasVisibleOutput() {
+					hasVisibleOutput = true
+				}
 			}
 
+			if service.ShouldTreatEmptyResponseAsFailure() && !hasVisibleOutput {
+				streamErr = service.EmptyUpstreamResponseError("empty upstream response from responses api")
+				sr.Stop(streamErr)
+				return
+			}
 			if !sendStartIfNeeded() {
 				sr.Stop(streamErr)
 				return
@@ -513,6 +529,10 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 
 	if streamErr != nil {
 		return nil, streamErr
+	}
+
+	if service.ShouldTreatEmptyResponseAsFailure() && !hasVisibleOutput {
+		return nil, service.EmptyUpstreamResponseError("empty upstream response from responses api")
 	}
 
 	if usage.TotalTokens == 0 {
